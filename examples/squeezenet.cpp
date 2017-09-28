@@ -1,23 +1,10 @@
-// Tencent is pleased to support the open source community by making ncnn available.
-//
-// Copyright (C) 2017 THL A29 Limited, a Tencent company. All rights reserved.
-//
-// Licensed under the BSD 3-Clause License (the "License"); you may not use this file except
-// in compliance with the License. You may obtain a copy of the License at
-//
-// https://opensource.org/licenses/BSD-3-Clause
-//
-// Unless required by applicable law or agreed to in writing, software distributed
-// under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-// CONDITIONS OF ANY KIND, either express or implied. See the License for the
-// specific language governing permissions and limitations under the License.
-
 #include <stdio.h>
 #include <algorithm>
 #include <vector>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
-
+using namespace std;
+using namespace cv;
 #include "net.h"
 
 static int detect_squeezenet(const cv::Mat& bgr, std::vector<float>& cls_scores)
@@ -49,7 +36,7 @@ static int detect_squeezenet(const cv::Mat& bgr, std::vector<float>& cls_scores)
     return 0;
 }
 
-static int print_topk(const std::vector<float>& cls_scores, int topk)
+static int print_topk(const std::vector<float>& cls_scores, int topk, vector<int>& index_result, vector<float>& score_result)
 {
     // partial sort topk with index
     int size = cls_scores.size();
@@ -60,24 +47,54 @@ static int print_topk(const std::vector<float>& cls_scores, int topk)
         vec[i] = std::make_pair(cls_scores[i], i);
     }
 
-    std::partial_sort(vec.begin(), vec.begin() + topk, vec.end(),
-                      std::greater< std::pair<float, int> >());
+    std::partial_sort(vec.begin(), vec.begin() + topk, vec.end(), std::greater< std::pair<float, int> >());
 
     // print topk and score
     for (int i=0; i<topk; i++)
     {
         float score = vec[i].first;
         int index = vec[i].second;
-        fprintf(stderr, "%d = %f\n", index, score);
+        index_result.push_back(index);
+        score_result.push_back(score);
+
+        //fprintf(stderr, "%d = %f\n", index, score);
     }
 
     return 0;
 }
 
+static int load_labels(string path, vector<string>& labels)
+{
+    FILE* fp = fopen(path.c_str(), "r");
+
+    while (!feof(fp))
+    {
+        char str[1024];
+        fgets(str, 1024, fp);  //¶ÁÈ¡Ò»ÐÐ
+        string str_s(str);
+
+        if (str_s.length() > 0)
+        {
+            for (int i = 0; i < str_s.length(); i++)
+            {
+                if (str_s[i] == ' ')
+                {
+                    string strr = str_s.substr(i, str_s.length() - i - 1);
+                    labels.push_back(strr);
+                    i = str_s.length();
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+
 int main(int argc, char** argv)
 {
     const char* imagepath = argv[1];
-
+    vector<string> labels;
+    load_labels("synset_words.txt", labels);
     cv::Mat m = cv::imread(imagepath, CV_LOAD_IMAGE_COLOR);
     if (m.empty())
     {
@@ -88,8 +105,19 @@ int main(int argc, char** argv)
     std::vector<float> cls_scores;
     detect_squeezenet(m, cls_scores);
 
-    print_topk(cls_scores, 3);
+    vector<int> index;
+    vector<float> score;
+    print_topk(cls_scores, 3, index, score);
+
+
+    for (int i = 0; i < index.size(); i++)
+    {
+       cv::putText(m, labels[index[i]], Point(50, 50 + 30 * i), CV_FONT_HERSHEY_SIMPLEX, 1.2, Scalar(0, 100, 200), 2, 8);
+    }
+
+    imshow("m", m);
+    imwrite("test_result.jpg", m);
+    waitKey(0);
 
     return 0;
 }
-
